@@ -1,7 +1,74 @@
 """示例数据：每个模块给几条不同状态的记录，方便起服务后立刻看到内容。"""
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
+
+
+def _days(offset: int) -> str:
+    """以今天为基准生成日期，保证年检临期、超期、车龄超限等规则在演示数据里始终能复现。"""
+    return (date.today() + timedelta(days=offset)).isoformat()
+
+
+def _vehicle_rows() -> list[dict[str, Any]]:
+    """特种车辆台账：覆盖可出勤、年检临期、年检超期、车龄超限、燃油不足、维修中、已报废等分支。"""
+    base = [
+        # (车辆编号, 车辆类型, 所属车队, 驾驶员, 年检偏移天, 投入使用偏移天, 燃油量, status)
+        ("VEHI-0001", "牵引车", "机坪一队", "王建国", 400, -3 * 365, 82, "待命"),
+        ("VEHI-0002", "摆渡车", "机坪一队", "李长顺", 10, -4 * 365, 66, "待命"),
+        ("VEHI-0003", "加油车", "航油保障队", "赵德柱", -6, -6 * 365, 74, "待命"),
+        ("VEHI-0004", "除冰车", "机坪二队", "孙立军", 210, -9 * 365, 78, "待命"),
+        ("VEHI-0005", "牵引车", "机坪二队", "周永强", 320, -5 * 365, 22, "待命"),
+        ("VEHI-0006", "摆渡车", "机坪一队", "吴海涛", 160, -2 * 365, 58, "出勤中"),
+        ("VEHI-0007", "平台车", "货运保障队", "郑铁林", 120, -3 * 365, 64, "维修中"),
+        ("VEHI-0008", "食品车", "航食保障队", "冯志远", 90, -7 * 365, 41, "已报废"),
+        ("VEHI-0009", "牵引车", "机坪一队", "何卫东", 380, -2 * 365, 91, "待命"),
+        ("VEHI-0010", "除冰车", "机坪二队", "曹立新", 60, -4 * 365, 72, "待命"),
+    ]
+    rows: list[dict[str, Any]] = []
+    for idx, (code, vtype, fleet, driver, insp_offset, service_offset, fuel, status) in enumerate(base, start=1):
+        rows.append({
+            "id": idx,
+            "status": status,
+            "pending": status == "待命",
+            "abnormal": False,
+            "车辆编号": code,
+            "车辆类型": vtype,
+            "所属车队": fleet,
+            "驾驶员": driver,
+            "年检日期": _days(insp_offset),
+            "投入使用日期": _days(service_offset),
+            "燃油量": fuel,
+            "调度状态": "已派车" if status == "出勤中" else "未派车",
+        })
+    return rows
+
+
+def _vehicle_dispatch_rows() -> list[dict[str, Any]]:
+    """当日出勤记录：一条出勤中、一条已收车，验证收车后排班记录仍然保留。"""
+    today = date.today().isoformat()
+    stamp = today.replace("-", "")
+    return [
+        {"id": 1, "单号": f"DISP-{stamp}-001", "车辆id": 6, "车辆编号": "VEHI-0006", "车辆类型": "摆渡车",
+         "驾驶员": "吴海涛", "出勤日期": today, "出勤时间": f"{today} 07:40:00", "收车时间": None,
+         "状态": "出勤中", "pending": True, "abnormal": False},
+        {"id": 2, "单号": f"DISP-{stamp}-002", "车辆id": 9, "车辆编号": "VEHI-0009", "车辆类型": "牵引车",
+         "驾驶员": "何卫东", "出勤日期": today, "出勤时间": f"{today} 06:50:00", "收车时间": f"{today} 09:15:00",
+         "状态": "已收车", "pending": False, "abnormal": False},
+    ]
+
+
+def _vehicle_maintenance_rows() -> list[dict[str, Any]]:
+    """维修记录：故意给同一辆车留两条，验证查询口径只保留最近一次登记。"""
+    return [
+        {"id": 1, "车辆id": 7, "车辆编号": "VEHI-0007", "维修日期": _days(-6),
+         "维修内容": "液压升降系统异响排查", "登记时间": f"{_days(-6)} 15:20:00", "经办人": "维修班-刘成",
+         "pending": False, "abnormal": False},
+        {"id": 2, "车辆id": 7, "车辆编号": "VEHI-0007", "维修日期": _days(-1),
+         "维修内容": "更换液压泵并复检", "登记时间": f"{_days(-1)} 10:05:00", "经办人": "维修班-刘成",
+         "pending": True, "abnormal": False},
+    ]
+
 
 SEED_ROWS: dict[str, list[dict[str, Any]]] = {
     "flightstand": [{'id': 1,
@@ -541,42 +608,9 @@ SEED_ROWS: dict[str, list[dict[str, Any]]] = {
   '风向风速': '航空气象样例3',
   '跑道视程': '航空气象样例3',
   '气象观测': '航空气象样例3'}],
-    "vehicle": [{'id': 1,
-  'status': '待命',
-  'pending': True,
-  'abnormal': False,
-  '车辆编号': 'VEHI-0001',
-  '车辆类型': '特种车辆样例1',
-  '所属车队': '特种车辆样例1',
-  '车辆状态': '特种车辆样例1',
-  '年检日期': '2026-09-01',
-  '驾驶员': '特种车辆样例1',
-  '燃油量': '特种车辆样例1',
-  '调度状态': '特种车辆样例1'},
- {'id': 2,
-  'status': '出勤中',
-  'pending': True,
-  'abnormal': True,
-  '车辆编号': 'VEHI-0002',
-  '车辆类型': '特种车辆样例2',
-  '所属车队': '特种车辆样例2',
-  '车辆状态': '特种车辆样例2',
-  '年检日期': '2026-09-02',
-  '驾驶员': '特种车辆样例2',
-  '燃油量': '特种车辆样例2',
-  '调度状态': '特种车辆样例2'},
- {'id': 3,
-  'status': '维修中',
-  'pending': False,
-  'abnormal': False,
-  '车辆编号': 'VEHI-0003',
-  '车辆类型': '特种车辆样例3',
-  '所属车队': '特种车辆样例3',
-  '车辆状态': '特种车辆样例3',
-  '年检日期': '2026-09-03',
-  '驾驶员': '特种车辆样例3',
-  '燃油量': '特种车辆样例3',
-  '调度状态': '特种车辆样例3'}],
+    "vehicle": _vehicle_rows(),
+    "vehicle_dispatch": _vehicle_dispatch_rows(),
+    "vehicle_maintenance": _vehicle_maintenance_rows(),
     "staffshift": [{'id': 1,
   'status': '待确认',
   'pending': True,

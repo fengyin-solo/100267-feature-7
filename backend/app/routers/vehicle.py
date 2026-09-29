@@ -1,9 +1,9 @@
-"""特种车辆接口：维护特种车辆，覆盖调度出勤、登记维修、申请报废等动作。"""
+"""特种车辆接口：车辆台账、出勤判定、当日出勤清单与出勤单导出。"""
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.schemas import ActionResult, EntryPayload, PageResult
 from app.services.vehicle import VehicleService
@@ -12,7 +12,6 @@ router = APIRouter(prefix="/api/vehicle", tags=["特种车辆"])
 
 service = VehicleService()
 
-LIST_FIELDS = ["车辆编号", "车辆类型", "所属车队", "车辆状态", "年检日期", "驾驶员", "燃油量", "调度状态"]
 STATUSES = ["待命", "出勤中", "维修中", "已报废"]
 
 
@@ -23,11 +22,64 @@ def list_entries(
     page: int = 1,
     size: int = 20,
 ) -> PageResult[dict]:
-    """按车辆编号与状态过滤特种车辆列表；没有数据时返回空页，不报错。"""
+    """按车辆编号与状态过滤特种车辆列表；每行附带车龄与出勤判定说明。"""
     if size > 200:
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+@router.get("/summary")
+def fleet_summary() -> dict[str, int]:
+    """车队汇总：可用车辆数的统一口径，台账、出勤清单、运营概览共用。"""
+    return service.fleet_summary()
+
+
+@router.get("/thresholds")
+def list_thresholds() -> dict[str, Any]:
+    """读取分车型的出勤判定阈值（燃油下限、车龄上限、年检临期窗口）。"""
+    return service.list_thresholds()
+
+
+@router.put("/thresholds/{vehicle_type}", response_model=ActionResult)
+def update_threshold(vehicle_type: str, payload: EntryPayload) -> ActionResult:
+    """按车型单独设置判定阈值；非法取值会被拦下并说明原因。"""
+    threshold, message = service.update_threshold(vehicle_type, payload.values)
+    if threshold is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=threshold)
+
+
+@router.get("/dispatch")
+def dispatch_sheet(day: str | None = Query(default=None, description="出勤日期，默认今天")) -> dict[str, Any]:
+    """当日出勤清单：排班记录持久保存，收车后刷新仍然保留。"""
+    day, records = service.dispatch_sheet(day)
+    return {"date": day, "total": len(records), "items": records, "summary": service.fleet_summary()}
+
+
+@router.get("/dispatch/export")
+def export_dispatch_sheet(day: str | None = Query(default=None, description="出勤日期，默认今天")) -> Response:
+    """导出当日出勤单（CSV）：与出勤清单同源，单上的车辆数必然对得上。"""
+    day, csv_text = service.dispatch_csv(day)
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=dispatch-{day}.csv"},
+    )
+
+
+@router.get("/maintenance")
+def list_maintenance() -> dict[str, Any]:
+    """维修记录：同一辆车重复登记只保留最近一次。"""
+    records = service.list_maintenance()
+    return {"total": len(records), "items": records}
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出特种车辆台账：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "vehicle", "total": total, "items": items}
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -50,16 +102,9 @@ def create_entry(payload: EntryPayload) -> ActionResult:
 
 @router.post("/{entry_id}/actions", response_model=ActionResult)
 def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
-    """对单条特种车辆执行调度出勤、登记维修、申请报废；不允许的动作会被拦下并说明原因。"""
+    """执行调度出勤、收车、补油、登记维修、完成维修、申请报废；不满足出勤口径会被拦下并说明原因。"""
     action = str(payload.values.get("action") or "").strip()
-    entry, message = service.run_action(entry_id, action)
+    entry, message = service.run_action(entry_id, action, payload.values)
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出特种车辆清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "vehicle", "total": total, "items": items}
