@@ -11,10 +11,14 @@
         <span class="stat-label">{{ card.label }}</span>
         <strong class="stat-value">{{ card.value }}</strong>
       </article>
+      <article class="stat-card">
+        <span class="stat-label">可用车辆</span>
+        <strong class="stat-value stat-available">{{ vehicleAvailable }}</strong>
+      </article>
     </div>
     <table class="data-table">
       <thead>
-        <tr><th>业务模块</th><th>今日新增</th><th>待处理</th><th>异常量</th></tr>
+        <tr><th>业务模块</th><th>今日新增</th><th>待处理</th><th>异常量</th><th>可用</th></tr>
       </thead>
       <tbody>
         <tr v-for="row in moduleRows" :key="row.name">
@@ -22,6 +26,7 @@
           <td>{{ row.created }}</td>
           <td>{{ row.pending }}</td>
           <td>{{ row.abnormal }}</td>
+          <td>{{ row.available ?? '—' }}</td>
         </tr>
       </tbody>
     </table>
@@ -35,20 +40,29 @@ import { fetchJson } from '@/api/client'
 
 type Overview = {
   cards: { label: string; value: number }[]
-  modules: { name: string; created: number; pending: number; abnormal: number }[]
+  modules: { name: string; created: number; pending: number; abnormal: number; available?: number }[]
 }
 
 const cards = ref<Overview['cards']>([])
 const moduleRows = ref<Overview['modules']>([])
+const vehicleAvailable = ref(0)
 
 onMounted(async () => {
   try {
     const payload = await fetchJson<Overview>('/api/overview')
     cards.value = payload.cards
     moduleRows.value = payload.modules
+    const vehicle = payload.modules.find((m) => m.name === 'vehicle')
+    vehicleAvailable.value = vehicle?.available ?? 0
   } catch {
     cards.value = [{"label": "业务模块", "value": 0}, {"label": "今日新增", "value": 0}]
-    moduleRows.value = [{"name": "机位分配", "created": 0, "pending": 0, "abnormal": 0}, {"name": "引导入位", "created": 0, "pending": 0, "abnormal": 0}, {"name": "廊桥对接", "created": 0, "pending": 0, "abnormal": 0}, {"name": "行李装卸", "created": 0, "pending": 0, "abnormal": 0}, {"name": "航食配餐", "created": 0, "pending": 0, "abnormal": 0}, {"name": "航油加注", "created": 0, "pending": 0, "abnormal": 0}, {"name": "除冰作业", "created": 0, "pending": 0, "abnormal": 0}, {"name": "清水排污", "created": 0, "pending": 0, "abnormal": 0}, {"name": "推出开车", "created": 0, "pending": 0, "abnormal": 0}, {"name": "地面设备", "created": 0, "pending": 0, "abnormal": 0}, {"name": "货物装卸", "created": 0, "pending": 0, "abnormal": 0}, {"name": "放行签派", "created": 0, "pending": 0, "abnormal": 0}, {"name": "过站保障", "created": 0, "pending": 0, "abnormal": 0}, {"name": "机坪巡查", "created": 0, "pending": 0, "abnormal": 0}, {"name": "航空气象", "created": 0, "pending": 0, "abnormal": 0}, {"name": "特种车辆", "created": 0, "pending": 0, "abnormal": 0}, {"name": "人员排班", "created": 0, "pending": 0, "abnormal": 0}, {"name": "跑道灯光", "created": 0, "pending": 0, "abnormal": 0}, {"name": "应急处置", "created": 0, "pending": 0, "abnormal": 0}, {"name": "质量监察", "created": 0, "pending": 0, "abnormal": 0}]
+    moduleRows.value = [{"name": "机位分配", "created": 0, "pending": 0, "abnormal": 0}, {"name": "引导入位", "created": 0, "pending": 0, "abnormal": 0}, {"name": "廊桥对接", "created": 0, "pending": 0, "abnormal": 0}, {"name": "行李装卸", "created": 0, "pending": 0, "abnormal": 0}, {"name": "航食配餐", "created": 0, "pending": 0, "abnormal": 0}, {"name": "航油加注", "created": 0, "pending": 0, "abnormal": 0}, {"name": "除冰作业", "created": 0, "pending": 0, "abnormal": 0}, {"name": "清水排污", "created": 0, "pending": 0, "abnormal": 0}, {"name": "推出开车", "created": 0, "pending": 0, "abnormal": 0}, {"name": "地面设备", "created": 0, "pending": 0, "abnormal": 0}, {"name": "货物装卸", "created": 0, "pending": 0, "abnormal": 0}, {"name": "放行签派", "created": 0, "pending": 0, "abnormal": 0}, {"name": "过站保障", "created": 0, "pending": 0, "abnormal": 0}, {"name": "机坪巡查", "created": 0, "pending": 0, "abnormal": 0}, {"name": "航空气象", "created": 0, "pending": 0, "abnormal": 0}, {"name": "特种车辆", "created": 0, "pending": 0, "abnormal": 0, "available": 0}, {"name": "人员排班", "created": 0, "pending": 0, "abnormal": 0}, {"name": "跑道灯光", "created": 0, "pending": 0, "abnormal": 0}, {"name": "应急处置", "created": 0, "pending": 0, "abnormal": 0}, {"name": "质量监察", "created": 0, "pending": 0, "abnormal": 0}]
   }
 })
 </script>
+
+<style scoped>
+.stat-available {
+  color: #1a7f37;
+}
+</style>
